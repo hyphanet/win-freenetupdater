@@ -276,7 +276,7 @@ begin
     begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
       if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
-        simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' save to ' + UpdManifest.FilePath[i][2])
+        simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2])
       else
       begin
         simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
