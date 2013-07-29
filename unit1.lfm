@@ -1,0 +1,17 @@
+object FreenetUpdaterForm: TFreenetUpdaterForm
+  Left = 1561
+  Height = 60
+  Top = 130
+  Width = 222
+  Caption = 'FreenetUpdater'
+  OnCreate = FormCreate
+  Position = poScreenCenter
+  LCLVersion = '1.0.10.0'
+  object Timer_MonitorPID: TTimer
+    Enabled = False
+    OnTimer = Timer_MonitorPIDTimer
+    OnStartTimer = Timer_MonitorPIDStartTimer
+    left = 40
+    top = 8
+  end
+end
