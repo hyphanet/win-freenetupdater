@@ -114,7 +114,7 @@ begin
   begin
     if UCopyFiles() then
     begin
-      simpleMyLog(mlfInfo, 'Successfull update');
+      simpleMyLog(mlfInfo, 'Successful update');
 
       { TODO :
        Launch freenet
