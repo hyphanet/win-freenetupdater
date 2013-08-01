@@ -6,7 +6,8 @@ interface
 
 uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, LConvEncoding, Windows, JwaTlHelp32, dateutils;
+  ExtCtrls, LConvEncoding, dateutils, RegExpr,
+  Windows, JwaTlHelp32;
 
 type
   TMyLogFlag = (mlfError, mlfInfo);
@@ -30,7 +31,7 @@ type
   TManifestData = record
     sWrapperPid, sJavaPid: string;
     iWrapperPid, iJavaPid: integer;
-    FilePath: array [0..2, 0..2] of string;  // [File1|File2|File3 , from|to|tobackup]
+    FilePath: array of array[0..2] of string;
     LogFile: string;
   end;
 
@@ -60,8 +61,8 @@ implementation
 procedure TFreenetUpdaterForm.FormCreate(Sender: TObject);
 begin
   // No need to see the GUI
-  FreenetUpdaterForm.WindowState:= wsMinimized;
-  FreenetUpdaterForm.ShowInTaskBar:= stNever;
+  FreenetUpdaterForm.WindowState := wsMinimized;
+  FreenetUpdaterForm.ShowInTaskBar := stNever;
 
   if UReadManifest('freenetupdater.ini') then
     if UCheckManifestValues() then
@@ -143,6 +144,10 @@ end;
 function UReadManifest(ManifestFilePath: string): boolean;
 var
   slFileData: TStringList;
+  rgxFileID: TRegExpr;
+  i: integer;
+  jFileID: integer = 0;
+
 begin
   Result := True;
 
@@ -157,22 +162,40 @@ begin
   else
   begin
     slFileData := TStringList.Create;
+    rgxFileID := TRegExpr.Create;
 
     slFileData.LoadFromFile(ManifestFilePath);
 
     // Read entries
     UpdManifest.sWrapperPid := slFileData.Values['wrapper.pid'];
     UpdManifest.sJavaPid := slFileData.Values['java.pid'];
-    UpdManifest.FilePath[0][0] := slFileData.Values['file1.from'];
-    UpdManifest.FilePath[0][1] := slFileData.Values['file1.to'];
-    UpdManifest.FilePath[1][0] := slFileData.Values['file2.from'];
-    UpdManifest.FilePath[1][1] := slFileData.Values['file2.to'];
-    UpdManifest.FilePath[2][0] := slFileData.Values['file3.from'];
-    UpdManifest.FilePath[2][1] := slFileData.Values['file3.to'];
     UpdManifest.LogFile := slFileData.Values['logfile'];
 
-    slFileData.Free;
+    for i := 0 to slFileData.Count - 1 do
+    begin
+      rgxFileID.Expression := 'file(\d+).from';
+      if rgxFileID.Exec(slFileData.Names[i]) then
+      begin
+        try
+          jFileID := StrToInt(rgxFileID.Match[1]);
+          if jFileID <> 0 then
+          begin
+            if jFileID >= Length(UpdManifest.FilePath) then
+              SetLength(UpdManifest.FilePath, jFileID);
 
+            UpdManifest.FilePath[jFileID - 1][0] := slFileData.Values['file' + IntToStr(jFileID) + '.from'];
+            UpdManifest.FilePath[jFileID - 1][1] := slFileData.Values['file' + IntToStr(jFileID) + '.to'];
+
+          end;
+
+        except
+          // WriteLn('jFileID is not a valid integer');
+        end;
+
+      end;
+    end;
+    slFileData.Free;
+    rgxFileID.Free;
     Result := True;
 
   end;
@@ -231,7 +254,7 @@ begin
   end;
 
   // Check Files
-  for i := 0 to 2 do
+  for i := 0 to High(UpdManifest.FilePath) do
   begin
     if UpdManifest.FilePath[i][0] <> '' then
     begin
@@ -272,7 +295,7 @@ begin
   if CreateDirUTF8(BackupDir) then
   begin
 
-    for i := 0 to 2 do
+    for i := 0 to High(UpdManifest.FilePath) do
     begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
       if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
@@ -300,7 +323,7 @@ begin
   Result := True;
   simpleMyLog(mlfInfo, '-- Copy files --');
 
-  for i := 0 to 2 do
+  for i := 0 to High(UpdManifest.FilePath) do
   begin
     if FileUtil.CopyFile(UpdManifest.FilePath[i][0], UpdManifest.FilePath[i][1]) then
       simpleMyLog(mlfInfo, 'Copy: ' + UpdManifest.FilePath[i][0] + ' copied to ' + UpdManifest.FilePath[i][1])
@@ -321,7 +344,7 @@ begin
   Result := True;
   simpleMyLog(mlfInfo, '-- Restore files --');
 
-  for i := 0 to 2 do
+  for i := 0 to High(UpdManifest.FilePath) do
   begin
     if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
       simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
