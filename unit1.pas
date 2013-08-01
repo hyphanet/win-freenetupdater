@@ -32,7 +32,6 @@ type
     sWrapperPid, sJavaPid: string;
     iWrapperPid, iJavaPid: integer;
     FilePath: array of array[0..2] of string;
-    LogFile: string;
   end;
 
 procedure UMainProcess;
@@ -63,6 +62,8 @@ begin
   // No need to see the GUI
   FreenetUpdaterForm.WindowState := wsMinimized;
   FreenetUpdaterForm.ShowInTaskBar := stNever;
+
+  LogFilePath := 'freenetupdater.log';
 
   if UReadManifest('freenetupdater.ini') then
     if UCheckManifestValues() then
@@ -101,7 +102,7 @@ begin
 
     if SecondsBetween(tMonitorPidStarted, Now) >= 5 * 60 then // Max waiting of 5 minutes
     begin
-      simpleMyLog(mlfInfo, 'Take to long, update canceled');
+      simpleMyLog(mlfInfo, 'Take too long, update canceled');
       simpleMyLog(mlfInfo, 'FreenetUpdater stop');
       Application.Terminate;
     end;
@@ -131,12 +132,14 @@ begin
       URestoreFiles();
       { TODO : check result of URestoreFiles }
 
+      Application.Terminate;
     end;
   end
   else
   begin
     simpleMyLog(mlfInfo, 'Something went wrong during backup');
     simpleMyLog(mlfInfo, 'Update process canceled');
+    Application.Terminate;
   end;
 end;
 
@@ -150,8 +153,6 @@ var
 
 begin
   Result := True;
-
-  LogFilePath := 'updater.log'; // Set a default logfile
 
   if not FileExistsUTF8(ManifestFilePath) then
   begin
@@ -169,7 +170,6 @@ begin
     // Read entries
     UpdManifest.sWrapperPid := slFileData.Values['wrapper.pid'];
     UpdManifest.sJavaPid := slFileData.Values['java.pid'];
-    UpdManifest.LogFile := slFileData.Values['logfile'];
 
     for i := 0 to slFileData.Count - 1 do
     begin
@@ -206,9 +206,6 @@ var
   i: integer;
 begin
   Result := True;
-
-  if UpdManifest.LogFile <> '' then
-    LogFilePath := UpdManifest.LogFile;
 
   simpleMyLog(mlfInfo, 'FreenetUpdater start');
 
