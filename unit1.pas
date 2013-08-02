@@ -31,7 +31,8 @@ type
   TManifestData = record
     sWrapperPid, sJavaPid: string;
     iWrapperPid, iJavaPid: integer;
-    FilePath: array of array[0..2] of string;
+    FilePath: array of array[0..3] of string; // 0:From ; 1:To ; 2:ToBackup ; 3:Boolean backup status
+
   end;
 
 procedure UMainProcess;
@@ -89,7 +90,9 @@ begin
   begin
     simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid +
       ' no longer exist. Start Update process');
+
     UMainProcess;        // We call the main Update process
+
     Timer_MonitorPID.Enabled := False;
   end
   else
@@ -139,10 +142,11 @@ begin
   begin
     simpleMyLog(mlfInfo, 'Something went wrong during backup');
     simpleMyLog(mlfInfo, 'Update process canceled');
+    URestoreFiles();
+
     Application.Terminate;
   end;
 end;
-
 
 function UReadManifest(ManifestFilePath: string): boolean;
 var
@@ -296,13 +300,17 @@ begin
     begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
       if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
-        simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2])
+      begin
+        simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
+        UpdManifest.FilePath[i][3] := BoolToStr(True);
+      end
       else
       begin
         simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
+        UpdManifest.FilePath[i][3] := BoolToStr(False);
         Result := False;
+        Exit;
       end;
-
     end;
 
   end
@@ -328,6 +336,7 @@ begin
     begin
       simpleMyLog(mlfError, 'Copy: ' + UpdManifest.FilePath[i][0] + ' not copied to ' + UpdManifest.FilePath[i][1]);
       Result := False;
+      Exit;
     end;
   end;
 
@@ -343,11 +352,14 @@ begin
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
-    if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
-      simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
-    else
+    if StrToBool(UpdManifest.FilePath[i][3]) then
     begin
-      simpleMyLog(mlfError, 'Restore: ' + UpdManifest.FilePath[i][2] + ' not restored');
+      if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
+        simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
+      else
+      begin
+        simpleMyLog(mlfError, 'Restore: ' + UpdManifest.FilePath[i][2] + ' not restored');
+      end;
     end;
   end;
 
