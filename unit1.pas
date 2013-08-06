@@ -5,9 +5,12 @@ unit Unit1;
 interface
 
 uses
+  {$IFDEF MSWINDOWS}
+  Windows, JwaTlHelp32,
+  {$ENDIF}
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, LConvEncoding, dateutils, RegExpr,
-  Windows, JwaTlHelp32;
+  ExtCtrls, LConvEncoding, dateutils, RegExpr;
+
 
 type
   TMyLogFlag = (mlfError, mlfInfo);
@@ -45,6 +48,9 @@ function URestoreFiles(): boolean;
 function FindProcessByID(const pPID: integer): boolean;
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
 
+const
+  MaxWaitingTime : integer = 300;
+
 var
   FreenetUpdaterForm: TFreenetUpdaterForm;
   UpdManifest: TManifestData;
@@ -73,6 +79,7 @@ begin
     begin
       simpleMyLog(mlfInfo, 'Something went wrong during Manifest checking');
       simpleMyLog(mlfInfo, 'Update process canceled');
+      Application.Terminate;
     end;
 end;
 
@@ -103,7 +110,7 @@ begin
     if FindProcessByID(UpdManifest.iJavaPid) then
       simpleMyLog(mlfInfo, UpdManifest.sJavaPid + ' still running');
 
-    if SecondsBetween(tMonitorPidStarted, Now) >= 5 * 60 then // Max waiting of 5 minutes
+    if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
     begin
       simpleMyLog(mlfInfo, 'Take too long, update canceled');
       simpleMyLog(mlfInfo, 'FreenetUpdater stop');
@@ -365,6 +372,14 @@ begin
 
 end;
 
+{$IFDEF UNIX}
+function FindProcessByID(const pPID: integer): boolean;
+begin
+  Result := false;
+end;
+{$ENDIF}
+
+{$IFDEF MSWINDOWS}
 function FindProcessByID(const pPID: integer): boolean;
 {
  source: http://wiki.lazarus.freepascal.org/Windows_Programming_Tips#Showing.2Ffinding_processes
@@ -391,6 +406,7 @@ begin
   until not Process32Next(S, PE);
   CloseHandle(S);
 end;
+{$ENDIF}
 
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
 var
