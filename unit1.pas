@@ -11,7 +11,6 @@ uses
   Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
   ExtCtrls, LConvEncoding, dateutils, RegExpr;
 
-
 type
   TMyLogFlag = (mlfError, mlfInfo);
 
@@ -34,8 +33,8 @@ type
   TManifestData = record
     sWrapperPid, sJavaPid: string;
     iWrapperPid, iJavaPid: integer;
-    FilePath: array of array[0..3] of string; // 0:From ; 1:To ; 2:ToBackup ; 3:Boolean backup status
-
+    FilePath: array of array[0..2] of string; // 0:From ; 1:To ; 2:ToBackup
+    FileBackupStatus: array of boolean;
   end;
 
 procedure UMainProcess;
@@ -49,7 +48,7 @@ function FindProcessByID(const pPID: integer): boolean;
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
 
 const
-  MaxWaitingTime : integer = 300;
+  MaxWaitingTime: integer = 300;
 
 var
   FreenetUpdaterForm: TFreenetUpdaterForm;
@@ -78,7 +77,7 @@ begin
     else
     begin
       simpleMyLog(mlfInfo, 'Something went wrong during Manifest checking');
-      simpleMyLog(mlfInfo, 'Update process canceled');
+      simpleMyLog(mlfInfo, 'Update process cancelled');
       Application.Terminate;
     end;
 end;
@@ -98,21 +97,24 @@ begin
     simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid +
       ' no longer exist. Start Update process');
 
+    Timer_MonitorPID.Enabled := False;
+
     UMainProcess;        // We call the main Update process
 
-    Timer_MonitorPID.Enabled := False;
   end
   else
   begin
-    if FindProcessByID(UpdManifest.iWrapperPid) then
+  (*
+   if FindProcessByID(UpdManifest.iWrapperPid) then
       simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' still running');
 
     if FindProcessByID(UpdManifest.iJavaPid) then
       simpleMyLog(mlfInfo, UpdManifest.sJavaPid + ' still running');
+  *)
 
     if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
     begin
-      simpleMyLog(mlfInfo, 'Take too long, update canceled');
+      simpleMyLog(mlfInfo, 'Take too long, update cancelled');
       simpleMyLog(mlfInfo, 'FreenetUpdater stop');
       Application.Terminate;
     end;
@@ -138,7 +140,7 @@ begin
     else
     begin
       simpleMyLog(mlfInfo, 'Something went wrong during copy');
-      simpleMyLog(mlfInfo, 'Update process canceled');
+      simpleMyLog(mlfInfo, 'Update process cancelled');
       URestoreFiles();
       { TODO : check result of URestoreFiles }
 
@@ -148,7 +150,7 @@ begin
   else
   begin
     simpleMyLog(mlfInfo, 'Something went wrong during backup');
-    simpleMyLog(mlfInfo, 'Update process canceled');
+    simpleMyLog(mlfInfo, 'Update process cancelled');
     URestoreFiles();
 
     Application.Terminate;
@@ -192,10 +194,14 @@ begin
           if jFileID <> 0 then
           begin
             if jFileID >= Length(UpdManifest.FilePath) then
+            begin
               SetLength(UpdManifest.FilePath, jFileID);
+              SetLength(UpdManifest.FileBackupStatus, jFileID);
+            end;
 
             UpdManifest.FilePath[jFileID - 1][0] := slFileData.Values['file' + IntToStr(jFileID) + '.from'];
             UpdManifest.FilePath[jFileID - 1][1] := slFileData.Values['file' + IntToStr(jFileID) + '.to'];
+            UpdManifest.FileBackupStatus[jFileID - 1] := False;
 
           end;
 
@@ -229,8 +235,8 @@ begin
     except
       on E: EConvertError do
       begin
-        Result := False;
         simpleMyLog(mlfError, UpdManifest.sWrapperPid + ' is not a valid integer');
+        Result := False;
       end;
     end;
   end
@@ -249,11 +255,11 @@ begin
     except
       on E: EConvertError do
       begin
-        Result := False;
         simpleMyLog(mlfError, UpdManifest.sJavaPid + ' is not a valid integer');
+        Result := False;
       end;
-
     end;
+
   end
   else
   begin
@@ -285,7 +291,6 @@ begin
       Result := False;
     end;
   end;
-
 end;
 
 function UBackupFiles(): boolean;
@@ -309,12 +314,13 @@ begin
       if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
       begin
         simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
-        UpdManifest.FilePath[i][3] := BoolToStr(True);
+        UpdManifest.FileBackupStatus[i] := True;
       end
       else
       begin
         simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
-        UpdManifest.FilePath[i][3] := BoolToStr(False);
+        UpdManifest.FileBackupStatus[i] := False;
+
         Result := False;
         Exit;
       end;
@@ -359,7 +365,7 @@ begin
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
-    if StrToBool(UpdManifest.FilePath[i][3]) then
+    if UpdManifest.FileBackupStatus[i] then
     begin
       if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
         simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
@@ -375,8 +381,9 @@ end;
 {$IFDEF UNIX}
 function FindProcessByID(const pPID: integer): boolean;
 begin
-  Result := false;
+  Result := False;
 end;
+
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
@@ -406,6 +413,7 @@ begin
   until not Process32Next(S, PE);
   CloseHandle(S);
 end;
+
 {$ENDIF}
 
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
