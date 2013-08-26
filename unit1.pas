@@ -311,18 +311,27 @@ begin
     for i := 0 to High(UpdManifest.FilePath) do
     begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
-      if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
-      begin
-        simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
-        UpdManifest.FileBackupStatus[i] := True;
-      end
-      else
-      begin
-        simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
-        UpdManifest.FileBackupStatus[i] := False;
 
-        Result := False;
-        Exit;
+      try
+        if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
+        begin
+          simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
+          UpdManifest.FileBackupStatus[i] := True;
+        end
+        else
+        begin
+          raise Exception.Create('RenameFileUTF8 return False');
+        end;
+
+      except
+        on E: Exception do
+        begin
+          simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
+          simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+          UpdManifest.FileBackupStatus[i] := False;
+          Result := False;
+          Exit;
+        end;
       end;
     end;
 
@@ -343,13 +352,21 @@ begin
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
-    if FileUtil.CopyFile(UpdManifest.FilePath[i][0], UpdManifest.FilePath[i][1]) then
-      simpleMyLog(mlfInfo, 'Copy: ' + UpdManifest.FilePath[i][0] + ' copied to ' + UpdManifest.FilePath[i][1])
-    else
-    begin
-      simpleMyLog(mlfError, 'Copy: ' + UpdManifest.FilePath[i][0] + ' not copied to ' + UpdManifest.FilePath[i][1]);
-      Result := False;
-      Exit;
+    try
+      if FileUtil.CopyFile(UpdManifest.FilePath[i][0], UpdManifest.FilePath[i][1]) then
+        simpleMyLog(mlfInfo, 'Copy: ' + UpdManifest.FilePath[i][0] + ' copied to ' + UpdManifest.FilePath[i][1])
+      else
+      begin
+        raise Exception.Create('FileUtil.CopyFile return False');
+      end;
+    except
+      on E: Exception do
+      begin
+        simpleMyLog(mlfError, 'Copy: ' + UpdManifest.FilePath[i][0] + ' not copied to ' + UpdManifest.FilePath[i][1]);
+        simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+        Result := False;
+        Exit;
+      end;
     end;
   end;
 
@@ -365,13 +382,23 @@ begin
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
-    if UpdManifest.FileBackupStatus[i] then
-    begin
-      if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
-        simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
-      else
+    try
+      if UpdManifest.FileBackupStatus[i] then
+      begin
+        if FileUtil.CopyFile(UpdManifest.FilePath[i][2], UpdManifest.FilePath[i][1]) then
+          simpleMyLog(mlfInfo, 'Restore: ' + UpdManifest.FilePath[i][2] + ' restored as ' + UpdManifest.FilePath[i][1])
+        else
+        begin
+          raise Exception.Create('FileUtil.CopyFile return False');
+        end;
+      end;
+
+    except
+      on E: Exception do
       begin
         simpleMyLog(mlfError, 'Restore: ' + UpdManifest.FilePath[i][2] + ' not restored');
+        simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+        Result := False;
       end;
     end;
   end;
