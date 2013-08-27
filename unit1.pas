@@ -118,43 +118,62 @@ begin
 end;
 
 procedure UMainProcess;
-
+var
+  bUseRestoreFile: boolean = False;
 begin
-  if UBackupFiles() then
-  begin
-    if UCopyFiles() then
-    begin
+  try
+    if not UBackupFiles() then
+      raise Exception.Create('E_UBackupFiles');
+    if not UCopyFiles() then
+      raise Exception.Create('E_UCopyFiles');
+    if not StopFreenetExe() then
+      raise Exception.Create('E_StopFreenetExe');
+    if not StartFreenetExe() then
+      raise Exception.Create('E_StartFreenetExe');
 
-      if StopFreenetExe() then
-      begin
-        if StartFreenetExe() then
-        begin
-          DeleteFileUTF8('freenetupdater.ini');
-          RemoveDirUTF8(BackupDir);
-          simpleMyLog(mlfInfo, 'Successful update');
-        end;
-
-      end;
-      Application.Terminate;
-    end
+    if DeleteFileUTF8('freenetupdater.ini') then
+      simpleMyLog(mlfInfo, 'Deletion of freenetupdater.ini')
     else
+      simpleMyLog(mlfError, 'Fail to delete freenetupdater.ini');
+
+    if DeleteDirectory(BackupDir,False) then
+      simpleMyLog(mlfInfo, 'Deletion of ' + BackupDir)
+    else
+      simpleMyLog(mlfError, 'Fail to delete ' + BackupDir);
+
+    simpleMyLog(mlfInfo, 'Successful update');
+
+  except
+    on E: Exception do
     begin
-      simpleMyLog(mlfInfo, 'Something went wrong during copy');
-      simpleMyLog(mlfInfo, 'Update process cancelled');
-      URestoreFiles();
-      { TODO : check result of URestoreFiles }
+      if E.Message = 'E_UBackupFiles' then
+      begin
+        simpleMyLog(mlfInfo, 'Something went wrong during backup');
+        simpleMyLog(mlfInfo, 'Update process cancelled');
+        bUseRestoreFile := True;
+      end;
 
-      Application.Terminate;
+      if E.Message = 'E_UCopyFiles' then
+      begin
+        simpleMyLog(mlfInfo, 'Something went wrong during copy');
+        simpleMyLog(mlfInfo, 'Update process cancelled');
+        bUseRestoreFile := True;
+      end;
+
+      if E.Message = 'E_StopFreenetExe' then
+      begin
+        simpleMyLog(mlfInfo, 'Can''t stop Freenet.exe');
+      end;
+
+      if bUseRestoreFile then
+      begin
+        URestoreFiles();
+      end;
+
     end;
-  end
-  else
-  begin
-    simpleMyLog(mlfInfo, 'Something went wrong during backup');
-    simpleMyLog(mlfInfo, 'Update process cancelled');
-    URestoreFiles();
-
-    Application.Terminate;
   end;
+
+  Application.Terminate;
 end;
 
 function UReadManifest(ManifestFilePath: string): boolean;
@@ -446,12 +465,12 @@ begin
 
     pFreenetExe.Free;
   except
-     on E: Exception do
-     begin
-        simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + pFreenetExe.Executable);
-        simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
-        pFreenetExe.Free;
-     end;
+    on E: Exception do
+    begin
+      simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + pFreenetExe.Executable);
+      simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+      pFreenetExe.Free;
+    end;
   end;
 
 end;
