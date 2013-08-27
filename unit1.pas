@@ -8,8 +8,8 @@ uses
   {$IFDEF MSWINDOWS}
   Windows, JwaTlHelp32,
   {$ENDIF}
-  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, StdCtrls,
-  ExtCtrls, LConvEncoding, dateutils, RegExpr;
+  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ExtCtrls, LConvEncoding,
+  dateutils, RegExpr, process;
 
 type
   TMyLogFlag = (mlfError, mlfInfo);
@@ -44,7 +44,10 @@ function UCheckManifestValues(): boolean;
 function UBackupFiles(): boolean;
 function UCopyFiles(): boolean;
 function URestoreFiles(): boolean;
+function StopFreenetExe(): boolean;
+function StartFreenetExe(): boolean;
 function FindProcessByID(const pPID: integer): boolean;
+function TerminateProcessByID(ProcessID: cardinal): boolean;
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
 
 const
@@ -104,14 +107,6 @@ begin
   end
   else
   begin
-  (*
-   if FindProcessByID(UpdManifest.iWrapperPid) then
-      simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' still running');
-
-    if FindProcessByID(UpdManifest.iJavaPid) then
-      simpleMyLog(mlfInfo, UpdManifest.sJavaPid + ' still running');
-  *)
-
     if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
     begin
       simpleMyLog(mlfInfo, 'Take too long, update cancelled');
@@ -123,18 +118,23 @@ begin
 end;
 
 procedure UMainProcess;
+
 begin
   if UBackupFiles() then
   begin
     if UCopyFiles() then
     begin
-      simpleMyLog(mlfInfo, 'Successful update');
 
-      { TODO :
-       Launch freenet
-       Delete the manifest file
-       and the backup dir ?}
+      if StopFreenetExe() then
+      begin
+        if StartFreenetExe() then
+        begin
+          DeleteFileUTF8('freenetupdater.ini');
+          RemoveDirUTF8(BackupDir);
+          simpleMyLog(mlfInfo, 'Successful update');
+        end;
 
+      end;
       Application.Terminate;
     end
     else
@@ -405,25 +405,82 @@ begin
 
 end;
 
+function StopFreenetExe(): boolean;
+var
+  sPidFilePath, sPidValue: string;
+  iPidValue: integer;
+begin
+  Result := True;
+
+  sPidFilePath := ExpandFileNameUTF8('..\freenet.pid');
+  sPidValue := ReadFileToString(sPidFilePath);
+  try
+    iPidValue := StrToInt(sPidValue);
+    if FindProcessByID(iPidValue) then
+    begin
+      if TerminateProcessByID(iPidValue) then
+        Result := True
+      else
+        Result := False;
+    end
+    else
+      Result := True;
+
+  except
+    // Exception
+  end;
+end;
+
+function StartFreenetExe(): boolean;
+var
+  pFreenetExe: Tprocess;
+begin
+  Result := False;
+
+  pFreenetExe := TProcess.Create(nil);
+  pFreenetExe.Executable := ExpandFileNameUTF8('..\freenet.exe');
+  try
+    pFreenetExe.Execute;
+    if pFreenetExe.Running then
+      Result := True;
+
+    pFreenetExe.Free;
+  except
+     on E: Exception do
+     begin
+        simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + pFreenetExe.Executable);
+        simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+        pFreenetExe.Free;
+     end;
+  end;
+
+end;
+
 {$IFDEF UNIX}
 function FindProcessByID(const pPID: integer): boolean;
 begin
   Result := False;
 end;
 
+function TerminateProcessByID(ProcessID: cardinal): boolean;
+begin
+  Result := True;
+end;
+
 {$ENDIF}
 
 {$IFDEF MSWINDOWS}
-function FindProcessByID(const pPID: integer): boolean;
 {
  source: http://wiki.lazarus.freepascal.org/Windows_Programming_Tips#Showing.2Ffinding_processes
 }
+function FindProcessByID(const pPID: integer): boolean;
 var
   CPID: DWORD;
   S: HANDLE;
   PE: TProcessEntry32;
 begin
   Result := False;
+
   S := CreateToolHelp32Snapshot(TH32CS_SNAPALL, 0); // Create snapshot
   PE.DWSize := SizeOf(PE); // Set size before use
 
@@ -439,6 +496,24 @@ begin
     end;
   until not Process32Next(S, PE);
   CloseHandle(S);
+end;
+
+{
+ source: http://snippets.delphidabbler.com/  >> System >>   TerminateProcessByID
+}
+function TerminateProcessByID(ProcessID: cardinal): boolean;
+var
+  HProcess: THandle;
+begin
+  Result := False;
+
+  HProcess := Windows.OpenProcess(Windows.PROCESS_TERMINATE, False, ProcessID);
+  if HProcess > 0 then
+    try
+      Result := SysUtils.Win32Check(Windows.TerminateProcess(HProcess, 0));
+    finally
+      Windows.CloseHandle(HProcess);
+    end;
 end;
 
 {$ENDIF}
