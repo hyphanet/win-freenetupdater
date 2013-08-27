@@ -39,14 +39,14 @@ type
 
 procedure UMainProcess;
 
-function UReadManifest(ManifestFilePath: string): boolean;
+function UReadManifest(): boolean;
 function UCheckManifestValues(): boolean;
 function UBackupFiles(): boolean;
 function UCopyFiles(): boolean;
 function URestoreFiles(): boolean;
 function StopFreenetExe(): boolean;
 function StartFreenetExe(): boolean;
-function FindProcessByID(const pPID: integer): boolean;
+function FindProcessByID(const pPID: cardinal): boolean;
 function TerminateProcessByID(ProcessID: cardinal): boolean;
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
 
@@ -56,6 +56,7 @@ const
 var
   FreenetUpdaterForm: TFreenetUpdaterForm;
   UpdManifest: TManifestData;
+  ManifestFilePath: string;
   LogFilePath: string;
   BackupDir: string;
   tMonitorPidStarted: TDateTime;
@@ -72,17 +73,44 @@ begin
   FreenetUpdaterForm.WindowState := wsMinimized;
   FreenetUpdaterForm.ShowInTaskBar := stNever;
 
-  LogFilePath := 'freenetupdater.log';
+  {
+   Force the current dir just in case.
+   Used by ExpandFileNameUTF8 in StartFreenetExe() and StopFreenetExe(); functions
+  }
+  SetCurrentDirUTF8(Application.Location);
 
-  if UReadManifest('freenetupdater.ini') then
-    if UCheckManifestValues() then
-      Timer_MonitorPID.Enabled := True
-    else
+  LogFilePath := Application.Location + 'freenetupdater.log';
+  ManifestFilePath := Application.Location + 'freenetupdater.ini';
+
+  try
+    if not StopFreenetExe() then
+      raise Exception.Create('E_StopFreenetExe');
+    if not UReadManifest() then
+      raise Exception.Create('E_UReadManifest');
+    if not UCheckManifestValues() then
+      raise Exception.Create('E_UCheckManifestValues');
+
+    Timer_MonitorPID.Enabled := True
+  except
+    on E: Exception do
     begin
-      simpleMyLog(mlfInfo, 'Something went wrong during Manifest checking');
+      if E.Message = 'E_StopFreenetExe' then
+      begin
+        simpleMyLog(mlfInfo, 'Something went wrong during StopFreenetExe');
+      end
+      else if E.Message = 'E_UReadManifest' then
+      begin
+        simpleMyLog(mlfInfo, 'E_UReadManifest');
+      end
+      else if E.Message = 'E_UCheckManifestValues' then
+      begin
+        simpleMyLog(mlfInfo, 'Something went wrong during Manifest checking');
+      end;
       simpleMyLog(mlfInfo, 'Update process cancelled');
       Application.Terminate;
     end;
+  end;
+
 end;
 
 procedure TFreenetUpdaterForm.Timer_MonitorPIDStartTimer(Sender: TObject);
@@ -97,13 +125,11 @@ procedure TFreenetUpdaterForm.Timer_MonitorPIDTimer(Sender: TObject);
 begin
   if not FindProcessByID(UpdManifest.iWrapperPid) and not FindProcessByID(UpdManifest.iJavaPid) then
   begin
-    simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid +
-      ' no longer exist. Start Update process');
+    simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid + ' no longer exist.');
+    simpleMyLog(mlfInfo, '-- Start Update process --');
 
     Timer_MonitorPID.Enabled := False;
-
     UMainProcess;        // We call the main Update process
-
   end
   else
   begin
@@ -124,19 +150,19 @@ begin
   try
     if not UBackupFiles() then
       raise Exception.Create('E_UBackupFiles');
+
     if not UCopyFiles() then
       raise Exception.Create('E_UCopyFiles');
-    if not StopFreenetExe() then
-      raise Exception.Create('E_StopFreenetExe');
+
     if not StartFreenetExe() then
       raise Exception.Create('E_StartFreenetExe');
 
-    if DeleteFileUTF8('freenetupdater.ini') then
-      simpleMyLog(mlfInfo, 'Deletion of freenetupdater.ini')
+    if DeleteFileUTF8(ManifestFilePath) then
+      simpleMyLog(mlfInfo, 'Deletion of ' + ManifestFilePath)
     else
-      simpleMyLog(mlfError, 'Fail to delete freenetupdater.ini');
+      simpleMyLog(mlfError, 'Fail to delete ' + ManifestFilePath);
 
-    if DeleteDirectory(BackupDir,False) then
+    if DeleteDirectory(BackupDir, False) then
       simpleMyLog(mlfInfo, 'Deletion of ' + BackupDir)
     else
       simpleMyLog(mlfError, 'Fail to delete ' + BackupDir);
@@ -149,34 +175,27 @@ begin
       if E.Message = 'E_UBackupFiles' then
       begin
         simpleMyLog(mlfInfo, 'Something went wrong during backup');
-        simpleMyLog(mlfInfo, 'Update process cancelled');
         bUseRestoreFile := True;
-      end;
-
-      if E.Message = 'E_UCopyFiles' then
+      end
+      else if E.Message = 'E_UCopyFiles' then
       begin
         simpleMyLog(mlfInfo, 'Something went wrong during copy');
-        simpleMyLog(mlfInfo, 'Update process cancelled');
         bUseRestoreFile := True;
-      end;
-
-      if E.Message = 'E_StopFreenetExe' then
-      begin
-        simpleMyLog(mlfInfo, 'Can''t stop Freenet.exe');
       end;
 
       if bUseRestoreFile then
       begin
+        simpleMyLog(mlfInfo, 'Update process cancelled');
         URestoreFiles();
+        StartFreenetExe();
       end;
-
-    end;
+     end;
   end;
 
   Application.Terminate;
 end;
 
-function UReadManifest(ManifestFilePath: string): boolean;
+function UReadManifest(): boolean;
 var
   slFileData: TStringList;
   rgxFileID: TRegExpr;
@@ -190,7 +209,6 @@ begin
   begin
     simpleMyLog(mlfError, 'Manifest file not found');
     Result := False;
-    Application.Terminate;
   end
   else
   begin
@@ -319,7 +337,7 @@ var
 begin
 
   Result := True;
-  simpleMyLog(mlfInfo, '-- Backup files --');
+  simpleMyLog(mlfInfo, '-- Backup files Start --');
 
   BackupTimeStamp := FormatDateTime('yyymmdd_hhnnss', Now);
   BackupDir := Application.Location + 'data_' + BackupTimeStamp;
@@ -360,6 +378,8 @@ begin
     simpleMyLog(mlfError, 'Backup: ' + 'Failed to create the BackupDir: ' + BackupDir);
     Result := False;
   end;
+
+  simpleMyLog(mlfInfo, '-- Backup files End --');
 end;
 
 function UCopyFiles(): boolean;
@@ -367,7 +387,7 @@ var
   i: integer;
 begin
   Result := True;
-  simpleMyLog(mlfInfo, '-- Copy files --');
+  simpleMyLog(mlfInfo, '-- Copy files Start --');
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
@@ -388,7 +408,7 @@ begin
       end;
     end;
   end;
-
+  simpleMyLog(mlfInfo, '-- Copy files End --');
 end;
 
 function URestoreFiles(): boolean;
@@ -397,7 +417,7 @@ var
 begin
 
   Result := True;
-  simpleMyLog(mlfInfo, '-- Restore files --');
+  simpleMyLog(mlfInfo, '-- Restore files Start --');
 
   for i := 0 to High(UpdManifest.FilePath) do
   begin
@@ -421,7 +441,7 @@ begin
       end;
     end;
   end;
-
+  simpleMyLog(mlfInfo, '-- Restore files End --');
 end;
 
 function StopFreenetExe(): boolean;
@@ -463,20 +483,18 @@ begin
     if pFreenetExe.Running then
       Result := True;
 
-    pFreenetExe.Free;
   except
     on E: Exception do
     begin
       simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + pFreenetExe.Executable);
       simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
-      pFreenetExe.Free;
     end;
   end;
-
+  pFreenetExe.Free;
 end;
 
 {$IFDEF UNIX}
-function FindProcessByID(const pPID: integer): boolean;
+function FindProcessByID(const pPID: cardinal): boolean;
 begin
   Result := False;
 end;
@@ -492,7 +510,7 @@ end;
 {
  source: http://wiki.lazarus.freepascal.org/Windows_Programming_Tips#Showing.2Ffinding_processes
 }
-function FindProcessByID(const pPID: integer): boolean;
+function FindProcessByID(const pPID: cardinal): boolean;
 var
   CPID: DWORD;
   S: HANDLE;
