@@ -100,7 +100,7 @@ begin
       end
       else if E.Message = 'E_UReadManifest' then
       begin
-        simpleMyLog(mlfInfo, 'E_UReadManifest');
+        simpleMyLog(mlfInfo, 'Error ReadManifest');
       end
       else if E.Message = 'E_UCheckManifestValues' then
       begin
@@ -189,7 +189,7 @@ begin
         URestoreFiles();
         StartFreenetExe();
       end;
-     end;
+    end;
   end;
 
   Application.Terminate;
@@ -322,7 +322,11 @@ begin
       simpleMyLog(mlfError, 'File' + IntToStr(i + 1) + '.from is empty');
     end;
 
-    if UpdManifest.FilePath[i][1] = '' then
+    if UpdManifest.FilePath[i][1] <> '' then
+    begin
+      simpleMyLog(mlfInfo, 'File' + IntToStr(i + 1) + '.to is ' + UpdManifest.FilePath[i][1]);
+    end
+    else
     begin
       simpleMyLog(mlfError, 'File' + IntToStr(i + 1) + '.to is empty');
       Result := False;
@@ -454,16 +458,15 @@ begin
   sPidFilePath := ExpandFileNameUTF8('..\freenet.pid');
   sPidValue := ReadFileToString(sPidFilePath);
   try
-    iPidValue := StrToInt(sPidValue);
-    if FindProcessByID(iPidValue) then
+    if sPidValue <> '' then
     begin
-      if TerminateProcessByID(iPidValue) then
-        Result := True
-      else
-        Result := False;
-    end
-    else
-      Result := True;
+      iPidValue := StrToInt(sPidValue);
+      if FindProcessByID(iPidValue) then
+      begin
+        if Not TerminateProcessByID(iPidValue) then
+          Result := False;
+      end;
+    end;
 
   except
     // Exception
