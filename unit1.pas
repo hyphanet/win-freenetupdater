@@ -1,5 +1,11 @@
 unit Unit1;
 
+{
+ Requirements:
+ - freenet.exe : used by the function StartFreenetExe
+ - freenetupdater.ini : with correct datas
+}
+
 {$mode objfpc}{$H+}
 
 interface
@@ -91,6 +97,7 @@ begin
       raise Exception.Create('E_UCheckManifestValues');
 
     Timer_MonitorPID.Enabled := True
+
   except
     on E: Exception do
     begin
