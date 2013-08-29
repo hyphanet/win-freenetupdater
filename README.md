@@ -10,4 +10,4 @@ See: [Issue 0005883](https://bugs.freenetproject.org/view.php?id=5883)
 
 Note:		
 As most of the code is cross plateform, this project can be tested (compiled and executed) on linux.		
-The only specific part for the Windows plateform is the function **FindProcessByID** (which, under linux will do nothing and return false)		
+The only specific part for the Windows plateform are the functions **FindProcessByID** (under linux will do nothing and return False) and **TerminateProcessByID**(under linux will do nothing and return True).		
