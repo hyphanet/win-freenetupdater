@@ -2,8 +2,10 @@ unit Unit1;
 
 {
  Requirements:
- - freenet.exe : used by the function StartFreenetExe
+ - <FreenetRoot>\freenet.exe : used by the function StartFreenetExe
  - freenetupdater.ini : with correct datas
+ - FreenetUpdater and freenetupdater.ini must put in the folder "updater" (<FreenetRoot>\updater\)
+   as it uses relative path for freenet.pid (see function StopFreenetExe) and freenet.exe (see function StartFreenetExe)
 }
 
 {$mode objfpc}{$H+}
