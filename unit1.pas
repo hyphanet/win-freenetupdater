@@ -144,6 +144,12 @@ begin
   begin
     if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
     begin
+      MessageDlg('FreenetUpdater',
+        'The updater waited too long for Freenet to exit.' + LineEnding +
+        'The update has not been deployed and you may have to start Freenet back up manually.' +
+        LineEnding + 'Please report this error to the Freenet developers (see our website for details).',
+        mtError, [mbClose], 0);
+
       simpleMyLog(mlfInfo, 'Take too long, update cancelled');
       simpleMyLog(mlfInfo, 'FreenetUpdater stop');
       Application.Terminate;
@@ -472,7 +478,7 @@ begin
       iPidValue := StrToInt(sPidValue);
       if FindProcessByID(iPidValue) then
       begin
-        if Not TerminateProcessByID(iPidValue) then
+        if not TerminateProcessByID(iPidValue) then
           Result := False;
       end;
     end;
