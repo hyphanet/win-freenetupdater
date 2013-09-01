@@ -67,7 +67,8 @@ var
   ManifestFilePath: string;
   LogFilePath: string;
   BackupDir: string;
-  tMonitorPidStarted: TDateTime;
+  tMonitorPidStarted, tMonitorPidInterval: TDateTime;
+  bMsgDlgMaxTimeDisplayed: boolean = False;
 
 implementation
 
@@ -128,6 +129,7 @@ begin
     UpdManifest.sJavaPid + ' (JavaPid)' + ' shutdowns');
 
   tMonitorPidStarted := Now;
+  tMonitorPidInterval := Now;
 end;
 
 procedure TFreenetUpdaterForm.Timer_MonitorPIDTimer(Sender: TObject);
@@ -142,17 +144,34 @@ begin
   end
   else
   begin
+    if SecondsBetween(tMonitorPidInterval, Now) >= 60 then
+    begin
+      if FindProcessByID(UpdManifest.iWrapperPid) then
+        simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' (WrapperPid) still running');
+
+      if FindProcessByID(UpdManifest.iJavaPid) then
+        simpleMyLog(mlfInfo, UpdManifest.sJavaPid + ' (JavaPid) still running');
+
+      tMonitorPidInterval:= Now;
+    end;
+
     if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
     begin
-      MessageDlg('FreenetUpdater',
-        'The updater waited too long for Freenet to exit.' + LineEnding +
-        'The update has not been deployed and you may have to start Freenet back up manually.' +
-        LineEnding + 'Please report this error to the Freenet developers (see our website for details).',
-        mtError, [mbClose], 0);
+      if bMsgDlgMaxTimeDisplayed = False then
+      begin
+        bMsgDlgMaxTimeDisplayed := True;
+        MessageDlg('FreenetUpdater',
+          'The updater waited too long for Freenet to exit.' + LineEnding +
+          'The update has not been deployed and you may have to start Freenet back up manually.' +
+          LineEnding + 'Please report this error to the Freenet developers (see our website for details).',
+          mtError, [mbClose], 0);
 
-      simpleMyLog(mlfInfo, 'Take too long, update cancelled');
-      simpleMyLog(mlfInfo, 'FreenetUpdater stop');
-      Application.Terminate;
+        simpleMyLog(mlfInfo, 'Take too long, update cancelled');
+        simpleMyLog(mlfInfo, 'FreenetUpdater stop');
+        Application.Terminate;
+      end;
+
+
     end;
   end;
 
