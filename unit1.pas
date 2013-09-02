@@ -152,7 +152,7 @@ begin
       if FindProcessByID(UpdManifest.iJavaPid) then
         simpleMyLog(mlfInfo, UpdManifest.sJavaPid + ' (JavaPid) still running');
 
-      tMonitorPidInterval:= Now;
+      tMonitorPidInterval := Now;
     end;
 
     if SecondsBetween(tMonitorPidStarted, Now) >= MaxWaitingTime then
@@ -170,7 +170,6 @@ begin
         simpleMyLog(mlfInfo, 'FreenetUpdater stop');
         Application.Terminate;
       end;
-
 
     end;
   end;
@@ -388,14 +387,22 @@ begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
 
       try
-        if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
+        if FileExistsUTF8(UpdManifest.FilePath[i][1]) then
         begin
-          simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
-          UpdManifest.FileBackupStatus[i] := True;
+          if RenameFileUTF8(UpdManifest.FilePath[i][1], UpdManifest.FilePath[i][2]) then
+          begin
+            simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' saved to ' + UpdManifest.FilePath[i][2]);
+            UpdManifest.FileBackupStatus[i] := True;
+          end
+          else
+          begin
+            raise Exception.Create('RenameFileUTF8 return False');
+          end;
         end
         else
         begin
-          raise Exception.Create('RenameFileUTF8 return False');
+           simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' doen''t exist. Backup not needed');
+           UpdManifest.FileBackupStatus[i] := False;
         end;
 
       except
