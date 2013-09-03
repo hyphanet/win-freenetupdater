@@ -54,6 +54,7 @@ function UCopyFiles(): boolean;
 function URestoreFiles(): boolean;
 function StopFreenetExe(): boolean;
 function StartFreenetExe(): boolean;
+function CheckDirWritable(sDirPath: string): boolean;
 function FindProcessByID(const pPID: cardinal): boolean;
 function TerminateProcessByID(ProcessID: cardinal): boolean;
 function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
@@ -358,6 +359,23 @@ begin
     if UpdManifest.FilePath[i][1] <> '' then
     begin
       simpleMyLog(mlfInfo, 'File' + IntToStr(i + 1) + '.to is ' + UpdManifest.FilePath[i][1]);
+      if DirectoryExistsUTF8(ExtractFileDir(UpdManifest.FilePath[i][1])) then
+      begin
+        if not CheckDirWritable(ExtractFileDir(UpdManifest.FilePath[i][1])) then
+        begin
+          simpleMyLog(mlfError, '└> Folder ' + ExtractFileDir(UpdManifest.FilePath[i][1]) + ' is not writable');
+          Result := False;
+        end;
+      end
+      else
+      begin
+        if not ForceDirectoriesUTF8(ExtractFileDir(UpdManifest.FilePath[i][1])) then
+        begin
+          simpleMyLog(mlfError, '└> Folder ' + ExtractFileDir(UpdManifest.FilePath[i][1]) + ' is not writable');
+          Result := False;
+        end;
+
+      end;
     end
     else
     begin
@@ -401,8 +419,8 @@ begin
         end
         else
         begin
-           simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' doen''t exist. Backup not needed');
-           UpdManifest.FileBackupStatus[i] := False;
+          simpleMyLog(mlfInfo, 'Backup: ' + UpdManifest.FilePath[i][1] + ' doen''t exist. Backup not needed');
+          UpdManifest.FileBackupStatus[i] := False;
         end;
 
       except
@@ -535,6 +553,22 @@ begin
     end;
   end;
   pFreenetExe.Free;
+end;
+
+function CheckDirWritable(sDirPath: string): boolean;
+var
+  hFileTmp: THandle;
+  sFileTmpPath: string;
+begin
+  Result := False;
+  sFileTmpPath := SysUtils.GetTempFilename(sDirPath, '');
+  hFileTmp := FileCreateUTF8(sFileTmpPath);
+  FileClose(hFileTmp);
+  if FileExistsUTF8(sFileTmpPath) then
+  begin
+    DeleteFileUTF8(sFileTmpPath);
+    Result := True;
+  end;
 end;
 
 {$IFDEF UNIX}
