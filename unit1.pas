@@ -92,6 +92,8 @@ begin
   LogFilePath := Application.Location + 'freenetupdater.log';
   ManifestFilePath := Application.Location + 'freenetupdater.ini';
 
+  simpleMyLog(mlfInfo, '### FreenetUpdater start ###');
+
   try
     if not StopFreenetExe() then
       raise Exception.Create('E_StopFreenetExe');
@@ -137,7 +139,7 @@ procedure TFreenetUpdaterForm.Timer_MonitorPIDTimer(Sender: TObject);
 begin
   if not FindProcessByID(UpdManifest.iWrapperPid) and not FindProcessByID(UpdManifest.iJavaPid) then
   begin
-    simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid + ' no longer exist.');
+    simpleMyLog(mlfInfo, UpdManifest.sWrapperPid + ' and ' + UpdManifest.sJavaPid + ' doesn''t exist anymore');
     simpleMyLog(mlfInfo, '-- Start Update process --');
 
     Timer_MonitorPID.Enabled := False;
@@ -295,8 +297,6 @@ var
 begin
   Result := True;
 
-  simpleMyLog(mlfInfo, 'FreenetUpdater start');
-
   // Wrapper.pid
   if UpdManifest.sWrapperPid <> '' then
   begin
@@ -363,7 +363,7 @@ begin
       begin
         if not CheckDirWritable(ExtractFileDir(UpdManifest.FilePath[i][1])) then
         begin
-          simpleMyLog(mlfError, '└> Folder ' + ExtractFileDir(UpdManifest.FilePath[i][1]) + ' is not writable');
+          simpleMyLog(mlfError, '└> Folder "' + ExtractFileDir(UpdManifest.FilePath[i][1]) + '" is not writable');
           Result := False;
         end;
       end
@@ -371,10 +371,9 @@ begin
       begin
         if not ForceDirectoriesUTF8(ExtractFileDir(UpdManifest.FilePath[i][1])) then
         begin
-          simpleMyLog(mlfError, '└> Folder ' + ExtractFileDir(UpdManifest.FilePath[i][1]) + ' is not writable');
+          simpleMyLog(mlfError, '└> Folder "' + ExtractFileDir(UpdManifest.FilePath[i][1]) + '" is not writable');
           Result := False;
         end;
-
       end;
     end
     else
@@ -395,11 +394,10 @@ begin
   simpleMyLog(mlfInfo, '-- Backup files Start --');
 
   BackupTimeStamp := FormatDateTime('yyymmdd_hhnnss', Now);
-  BackupDir := Application.Location + 'data_' + BackupTimeStamp;
+  BackupDir := Application.Location + 'FreenetUpdaterBackup_' + BackupTimeStamp;
 
   if CreateDirUTF8(BackupDir) then
   begin
-
     for i := 0 to High(UpdManifest.FilePath) do
     begin
       UpdManifest.FilePath[i][2] := BackupDir + '\' + ExtractFileName(UpdManifest.FilePath[i][1]); // Set ToBackup path
@@ -426,8 +424,9 @@ begin
       except
         on E: Exception do
         begin
-          simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1]);
-          simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
+          simpleMyLog(mlfError, 'Backup: Failed to create the backup of ' + UpdManifest.FilePath[i][1] +
+            ' to ' + UpdManifest.FilePath[i][2]);
+          simpleMyLog(mlfError, ' └> Exception message: ' + E.Message);
           UpdManifest.FileBackupStatus[i] := False;
           Result := False;
           Exit;
