@@ -2,6 +2,7 @@ unit Unit1;
 
 {
  Requirements:
+ - Must be launch with the working directory set as <FreenetRoot>\updater
  - <FreenetRoot>\freenet.exe : used by the function StartFreenetExe
  - freenetupdater.ini : with correct datas
  - FreenetUpdater and freenetupdater.ini must be put in the folder "updater" (<FreenetRoot>\updater\)
@@ -13,11 +14,9 @@ unit Unit1;
 interface
 
 uses
-  {$IFDEF MSWINDOWS}
-  Windows, JwaTlHelp32,
-  {$ENDIF}
-  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ExtCtrls, LConvEncoding,
-  dateutils, RegExpr, process;
+  Classes, SysUtils, FileUtil, Forms, Controls, Graphics, Dialogs, ExtCtrls, LCLIntf,
+  dateutils, RegExpr, lazutf8classes, LazUTF8, LConvEncoding,
+  Windows, ShellApi, JwaTlHelp32;
 
 type
   TMyLogFlag = (mlfError, mlfInfo);
@@ -57,7 +56,9 @@ function StartFreenetExe(): boolean;
 function CheckDirWritable(sDirPath: string): boolean;
 function FindProcessByID(const pPID: cardinal): boolean;
 function TerminateProcessByID(ProcessID: cardinal): boolean;
-function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
+
+function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string): boolean;
+function customExpandFileNameUTF8(const FileName: string): string;
 
 const
   MaxWaitingTime: integer = 300;
@@ -66,10 +67,12 @@ var
   FreenetUpdaterForm: TFreenetUpdaterForm;
   UpdManifest: TManifestData;
   ManifestFilePath: string;
-  LogFilePath: string;
+  LogFilePath: UTF8String;
+  slLogLine: TStringListUTF8;
   BackupDir: string;
   tMonitorPidStarted, tMonitorPidInterval: TDateTime;
   bMsgDlgMaxTimeDisplayed: boolean = False;
+  dTick1Log: DWORD;
 
 implementation
 
@@ -79,22 +82,19 @@ implementation
 
 procedure TFreenetUpdaterForm.FormCreate(Sender: TObject);
 begin
+
   // No need to see the GUI
   FreenetUpdaterForm.WindowState := wsMinimized;
   FreenetUpdaterForm.ShowInTaskBar := stNever;
 
-  {
-   Force the current dir just in case.
-   Used by ExpandFileNameUTF8 in StartFreenetExe() and StopFreenetExe(); functions
-  }
-  SetCurrentDirUTF8(Application.Location);
-
-  LogFilePath := Application.Location + 'freenetupdater.log';
-  ManifestFilePath := Application.Location + 'freenetupdater.ini';
+  LogFilePath := GetCurrentDirUTF8 + '\freenetupdater.log';
+  ManifestFilePath := GetCurrentDirUTF8 + '\freenetupdater.ini';
 
   simpleMyLog(mlfInfo, '### FreenetUpdater start ###');
+  dTick1Log := GetTickCount;
 
   try
+
     if not StopFreenetExe() then
       raise Exception.Create('E_StopFreenetExe');
     if not UReadManifest() then
@@ -119,12 +119,15 @@ begin
       begin
         simpleMyLog(mlfInfo, 'Something went wrong during Manifest checking');
       end;
+      simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
       simpleMyLog(mlfInfo, 'Update process cancelled');
-      Application.Terminate;
+      simpleMyLog(mlfInfo, '### FreenetUpdater Stop ###');
+      FreenetUpdaterForm.Close;
     end;
   end;
 
 end;
+
 
 procedure TFreenetUpdaterForm.Timer_MonitorPIDStartTimer(Sender: TObject);
 begin
@@ -170,8 +173,8 @@ begin
           mtError, [mbClose], 0);
 
         simpleMyLog(mlfInfo, 'Take too long, update cancelled');
-        simpleMyLog(mlfInfo, 'FreenetUpdater stop');
-        Application.Terminate;
+        simpleMyLog(mlfInfo, '### FreenetUpdater Stop ###');
+        FreenetUpdaterForm.Close;
       end;
 
     end;
@@ -227,13 +230,13 @@ begin
       end;
     end;
   end;
-
-  Application.Terminate;
+  simpleMyLog(mlfInfo, '### FreenetUpdater Stop ###');
+  FreenetUpdaterForm.Close;
 end;
 
 function UReadManifest(): boolean;
 var
-  slFileData: TStringList;
+  slFileData: TStringListUTF8;
   rgxFileID: TRegExpr;
   i: integer;
   jFileID: integer = 0;
@@ -248,7 +251,7 @@ begin
   end
   else
   begin
-    slFileData := TStringList.Create;
+    slFileData := TStringListUTF8.Create;
     rgxFileID := TRegExpr.Create;
 
     slFileData.LoadFromFile(ManifestFilePath);
@@ -394,7 +397,7 @@ begin
   simpleMyLog(mlfInfo, '-- Backup files Start --');
 
   BackupTimeStamp := FormatDateTime('yyymmdd_hhnnss', Now);
-  BackupDir := Application.Location + 'FreenetUpdaterBackup_' + BackupTimeStamp;
+  BackupDir := GetCurrentDirUTF8 + '\FreenetUpdaterBackup_' + BackupTimeStamp;
 
   if CreateDirUTF8(BackupDir) then
   begin
@@ -508,12 +511,13 @@ end;
 
 function StopFreenetExe(): boolean;
 var
-  sPidFilePath, sPidValue: string;
+  sPidFilePath: UnicodeString;
+  sPidValue: string;
   iPidValue: integer;
 begin
   Result := True;
 
-  sPidFilePath := ExpandFileNameUTF8('..\freenet.pid');
+  sPidFilePath := customExpandFileNameUTF8('..\freenet.pid');
   sPidValue := ReadFileToString(sPidFilePath);
   try
     if sPidValue <> '' then
@@ -533,25 +537,19 @@ end;
 
 function StartFreenetExe(): boolean;
 var
-  pFreenetExe: Tprocess;
+  h: HINST;
+  sFreenetExePath: WideString;
 begin
   Result := False;
-
-  pFreenetExe := TProcess.Create(nil);
-  pFreenetExe.Executable := ExpandFileNameUTF8('..\freenet.exe');
-  try
-    pFreenetExe.Execute;
-    if pFreenetExe.Running then
-      Result := True;
-
-  except
-    on E: Exception do
-    begin
-      simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + pFreenetExe.Executable);
-      simpleMyLog(mlfError, '└> Exception message: ' + E.Message);
-    end;
+  sFreenetExePath := UTF8ToUTF16(customExpandFileNameUTF8('..\freenet.exe'));
+  h := ShellExecuteW(0, 'open', PWideChar(sFreenetExePath), nil, nil, 1);
+  if h > 32 then
+    Result := True
+  else
+  begin
+    simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + UTF16ToUTF8(sFreenetExePath));
+    Result := False;
   end;
-  pFreenetExe.Free;
 end;
 
 function CheckDirWritable(sDirPath: string): boolean;
@@ -570,20 +568,6 @@ begin
   end;
 end;
 
-{$IFDEF UNIX}
-function FindProcessByID(const pPID: cardinal): boolean;
-begin
-  Result := False;
-end;
-
-function TerminateProcessByID(ProcessID: cardinal): boolean;
-begin
-  Result := True;
-end;
-
-{$ENDIF}
-
-{$IFDEF MSWINDOWS}
 {
  source: http://wiki.lazarus.freepascal.org/Windows_Programming_Tips#Showing.2Ffinding_processes
 }
@@ -630,12 +614,13 @@ begin
     end;
 end;
 
-{$ENDIF}
 
-function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string; AppendNewLine: boolean = True): boolean;
+function simpleMyLog(LogFlag: TMyLogFlag; LogLine: string): boolean;
 var
-  logText: TextFile;
   flag: string;
+  sl: TStringListUTF8;
+  fs: TFileStreamUTF8;
+
 begin
   Result := True;
 
@@ -644,25 +629,50 @@ begin
   if LogFlag = mlfInfo then
     flag := 'INFO   ';
   LogLine := flag + '| ' + FormatDateTime('yyyy/mm/dd hh:nn:ss', Now) + ' | ' + LogLine;
-  AssignFile(logText, LogFilePath);
+
+  sl := TStringListUTF8.Create;
+
+  if FileExistsUTF8(LogFilePath) then
+  begin
+    sl.LoadFromFile(LogFilePath);
+    fs := TFileStreamUTF8.Create(LogFilePath, fmOpenReadWrite);
+  end
+  else
+    fs := TFileStreamUTF8.Create(LogFilePath, fmCreate);
+
   try
-    if FileExistsUTF8(LogFilePath) then
-      Append(logText)
-    else
-      Rewrite(logText);
 
-    if AppendNewLine then
-      WriteLn(logText, LogLine)
-    else
-      Write(logText, LogLine);
+    sl.Add(LogLine);
+    sl.SaveToStream(fs);
 
-    CloseFile(logText);
-  except
-    on E: EInOutError do
-    begin
-      Result := False;
-    end;
+    fs.Size := fs.Size - Length(LineEnding);
+  finally
+    sl.Free;
+    fs.Free;
   end;
+
+end;
+
+{
+ Inspired from function ExtractShortPathNameUTF8
+}
+function customExpandFileNameUTF8(const FileName: string): string;
+var
+  lPathSize: DWORD;
+  WideFileName, WideResult: UnicodeString;
+  WideResult2: string;
+begin
+  if Win32MajorVersion >= 5 then
+  begin
+    WideFileName := UTF8ToUTF16(FileName);
+    SetLength(WideResult, Max_Path);
+    lPathSize := GetFullPathNameW(PWideChar(WideFileName), length(WideResult), PWideChar(
+      WideResult), PWideChar(WideResult2));
+    SetLength(WideResult, lPathSize);
+    Result := UTF16ToUTF8(WideResult);
+  end
+  else
+    Result := SysToUTF8(SysUtils.ExtractShortPathName(UTF8ToSys(FileName)));
 end;
 
 end.
