@@ -525,7 +525,12 @@ begin
       iPidValue := StrToInt(sPidValue);
       if FindProcessByID(iPidValue) then
       begin
-        if not TerminateProcessByID(iPidValue) then
+        if TerminateProcessByID(iPidValue) then
+        begin
+          DeleteFileUTF8(sPidFilePath);
+          simpleMyLog(mlfInfo, 'Process freenet.exe with PID ' + IntToStr(iPidValue) + ' stopped');
+        end
+        else
           Result := False;
       end;
     end;
@@ -538,13 +543,21 @@ end;
 function StartFreenetExe(): boolean;
 var
   h: HINST;
-  sFreenetExePath: WideString;
+  sFreenetExePath, sFreenetExeDir: WideString;
 begin
   Result := False;
-  sFreenetExePath := UTF8ToUTF16(customExpandFileNameUTF8('..\freenet.exe'));
-  h := ShellExecuteW(0, 'open', PWideChar(sFreenetExePath), nil, nil, 1);
+  sFreenetExePath := customExpandFileNameUTF8('..\freenet.exe');
+  sFreenetExeDir := ExtractFileDir(sFreenetExePath);
+
+  sFreenetExePath := UTF8ToUTF16(sFreenetExePath);
+  sFreenetExeDir := UTF8ToUTF16(sFreenetExeDir);
+
+  h := ShellExecuteW(0, 'open', PWideChar(sFreenetExePath), nil, PWideChar(sFreenetExeDir), 1);
   if h > 32 then
-    Result := True
+  begin
+    simpleMyLog(mlfInfo, 'freenet.exe launched');
+    Result := True;
+  end
   else
   begin
     simpleMyLog(mlfError, 'StartFreenet: fail to start freenet.exe at ' + UTF16ToUTF8(sFreenetExePath));
